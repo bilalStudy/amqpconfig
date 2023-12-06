@@ -13,6 +13,5 @@ public class OrderEvent {
     private String name;
     private String date;
     private String amount;
-
 }
 
