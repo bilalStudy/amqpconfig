@@ -15,28 +15,32 @@ import org.springframework.messaging.handler.annotation.support.MessageHandlerMe
 @Configuration
 public class AMQPConfiguration {
     //the payment will be a consumer to begin with
-    @Value("${amqp.routing.key.order}")
+    @Value("${amqp.routing.key.payment}")
     private String routingKey;
 
+    //The Payment queue
     @Bean
-    public Queue orderQueue(@Value("${amqp.queue.order}") final String queueName){
+    public Queue paymentQueue(@Value("${amqp.queue.payment}") final String queueName){
         return QueueBuilder.durable(queueName).build();
     }
 
+    // TopicExchange for payment
     @Bean
-    public TopicExchange OrderExchange(
-            @Value("${amqp.exchange.order}") final String exchangeName) {
+    public TopicExchange PaymentExchange(
+            @Value("${amqp.exchange.payment}") final String exchangeName) {
         return ExchangeBuilder.topicExchange(exchangeName).durable(true).build();
     }
 
+    // the binding between the queue and the exchange
     @Bean
-    public Binding OrdersBinding(final Queue orderQueue,
-                                 final TopicExchange orderExchange) {
-        return BindingBuilder.bind(orderQueue)
-                .to(orderExchange)
+    public Binding PaymentsBinding(final Queue paymnetQueue,
+                                 final TopicExchange paymentExchange) {
+        return BindingBuilder.bind(paymnetQueue)
+                .to(paymentExchange)
                 .with(routingKey);
     }
 
+    // messagehandlerfactory
     @Bean
     public MessageHandlerMethodFactory messageHandlerMethodFactory() {
         DefaultMessageHandlerMethodFactory factory = new DefaultMessageHandlerMethodFactory();
@@ -50,11 +54,13 @@ public class AMQPConfiguration {
         return factory;
     }
 
+    //json formatting
     @Bean
     public Jackson2JsonMessageConverter producerJackson2MessageConverter() {
         return new Jackson2JsonMessageConverter();
     }
 
+    //
     @Bean
     public RabbitListenerConfigurer rabbitListenerConfigurer(
             final MessageHandlerMethodFactory messageHandlerMethodFactory) {

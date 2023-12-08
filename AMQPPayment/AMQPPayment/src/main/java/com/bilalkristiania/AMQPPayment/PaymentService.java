@@ -1,10 +1,14 @@
 package com.bilalkristiania.AMQPPayment;
 
+import jakarta.persistence.criteria.Order;
+
+import java.math.BigDecimal;
+
 public interface PaymentService {
-    void processOrderEvent(OrderEvent orderEvent);
+    PaymentResult processOrderEvent(OrderEvent orderEvent);
     //boolean processPayment(double amount);
 
-    boolean processPayment(OrderEvent orderEvent);
+    PaymentResult processPayment(OrderEvent orderEvent);
 
     double checkBalance();
 
@@ -15,4 +19,6 @@ public interface PaymentService {
     Payment getInternalPayment(Long id);
 
     Payment saveInternalPayment(Payment payment);
+
+    void sendRabbitPaymentEvent(OrderEvent orderEvent, boolean paymentSuccessful);
 }

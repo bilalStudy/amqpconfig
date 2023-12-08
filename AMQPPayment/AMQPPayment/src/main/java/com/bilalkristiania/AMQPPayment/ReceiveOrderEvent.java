@@ -5,6 +5,8 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
+
 @Slf4j
 @Component
 public class ReceiveOrderEvent {
@@ -19,6 +21,10 @@ public class ReceiveOrderEvent {
     @RabbitListener(queues = "${amqp.queue.order}") // Replace with the actual queue name
     public void receiveOrderEvent(OrderEvent orderEvent) {
         log.info("Received Order Event in Payment Service: {}", orderEvent);
-        paymentServiceImplementation.processOrderEvent(orderEvent);
+        PaymentResult paymentResult = paymentServiceImplementation.processOrderEvent(orderEvent);
+        boolean paymentSuccessful = paymentResult.isPaymentSuccessful();
+        BigDecimal bankAccountAmount = paymentResult.getCurrentBalance();
+        log.info("Test Log After Received Order Process in RecieveOrder{}", orderEvent);
+        paymentServiceImplementation.sendRabbitPaymentEvent(orderEvent, paymentSuccessful);
     }
 }

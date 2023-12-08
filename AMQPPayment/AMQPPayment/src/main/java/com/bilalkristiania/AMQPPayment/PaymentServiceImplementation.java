@@ -1,11 +1,15 @@
 package com.bilalkristiania.AMQPPayment;
 
 
+import jakarta.persistence.criteria.Order;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.aspectj.weaver.ast.Or;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -18,36 +22,62 @@ public class PaymentServiceImplementation implements PaymentService{
 
     private final PaymentRepository paymentRepository;
 
+    private final PaymentEventPub paymentEventPub;
+
 
     // remember to check for if user/order exists.
     // might need to parse the Double to BigDecimal instead
     @Override
-    public void processOrderEvent(OrderEvent orderEvent) {
+    public PaymentResult processOrderEvent(OrderEvent orderEvent) {
         double orderAmount = Double.parseDouble(orderEvent.getAmount());
         log.info("Processing Order Event: {}", orderEvent);
-        processPayment(orderEvent);
+        PaymentResult paymentResult = processPayment(orderEvent);
+        boolean paymentSuccessful = paymentResult.isPaymentSuccessful();
+        BigDecimal currentBalance = paymentResult.getCurrentBalance();
         log.info("Processed Order Event: {}", orderEvent);
+        return new PaymentResult(paymentSuccessful, currentBalance);
     }
 
+
     @Override
-    public boolean processPayment(OrderEvent orderEvent) {
-        if (payment == null) {
-            // Initialize the payment entity with an initial balance if not exists
-            payment = new Payment();
-            payment.setBalance(BigDecimal.valueOf(1000000.0));
-        }
-        double amount = Double.parseDouble(orderEvent.getAmount());
+    public PaymentResult processPayment(OrderEvent orderEvent) {
+        Long paymentId = 1L; // Adjust the ID based on your setup
+        Optional<Payment> optionalPayment = paymentRepository.findById(paymentId);
+
+        Payment payment = optionalPayment.orElseGet(() -> {
+            // If payment doesn't exist, create a new one
+            Payment newPayment = new Payment();
+            newPayment.setBalance(BigDecimal.valueOf(4000000.0));
+            return paymentRepository.save(newPayment);
+        });
+
+        double orderAmount = Double.parseDouble(orderEvent.getAmount());
         BigDecimal currentBalance = payment.getBalance();
-        if (currentBalance.compareTo(BigDecimal.valueOf(amount)) >= 0) {
+
+        boolean paymentSuccessful = false;
+
+        if (currentBalance.compareTo(BigDecimal.valueOf(orderAmount)) >= 0) {
             // Sufficient funds, update the balance
-            payment.setBalance(currentBalance.subtract(BigDecimal.valueOf(amount)));
-            orderEvent.setStatus("goodFunds");
-            log.info("Payment successful. Remaining balance: {}", payment.getBalance());
-            return true;  // Payment successful
+            payment.setBalance(currentBalance.subtract(BigDecimal.valueOf(orderAmount)));
+            paymentSuccessful = true;
         }
-        orderEvent.setStatus("badFunds");
-        log.warn("Insufficient funds for payment. Current balance: {}", currentBalance);
-        return false;  // Insufficient funds
+
+        logPaymentStatus(paymentSuccessful, currentBalance);
+        orderEvent.setStatus(paymentSuccessful ? "goodFunds" : "badFunds");
+
+        // Save the updated payment entity
+        paymentRepository.save(payment);
+
+        return new PaymentResult(paymentSuccessful, currentBalance);
+    }
+
+
+    private void logPaymentStatus(boolean paymentSuccessful, BigDecimal currentBalance) {
+        if (paymentSuccessful) {
+            log.info("Payment successful. Remaining balance: {}", currentBalance);
+        } else {
+            log.warn("Insufficient funds for payment. Current balance: {}", currentBalance);
+        }
     }
 
     @Override
@@ -82,6 +112,21 @@ public class PaymentServiceImplementation implements PaymentService{
             payment = newPayment;
         }
         return payment;
+    }
+
+    @Override
+    public void sendRabbitPaymentEvent(OrderEvent orderEvent, boolean paymentSuccessful) {
+        // save payment if needed
+
+        PaymentEvent paymentEvent = new PaymentEvent();
+        paymentEvent.setPaymentId(1L);
+        paymentEvent.setOrderId(orderEvent.getId());
+        paymentEvent.setPaymentSuccessful(paymentSuccessful);
+        paymentEvent.setStatus(orderEvent.getStatus());
+        paymentEvent.setName(orderEvent.getName());
+        paymentEvent.setAmount(orderEvent.getAmount());
+
+        paymentEventPub.sendPaymentEvent(paymentEvent);
     }
 
 
